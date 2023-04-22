@@ -10,12 +10,19 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Load Data
 ```{r}
-data_dir <- "../data/"
-listing <- read.csv(paste0(data_dir,"listings.csv"))
-listing2 <- read.csv(paste0(data_dir, "listings 2.csv"))
-neighbourhoods <- read.csv(paste0(data_dir, "neighbourhoods.csv"))
-reviews <- read.csv(paste0(data_dir, "reviews.csv"))
-reviews2 <- read.csv(paste0(data_dir, "reviews 2.csv"))
+#data_dir <- "../data/"
+#listing <- read.csv(paste0(data_dir,"listings.csv"))
+#listing2 <- read.csv(paste0(data_dir, "listings 2.csv"))
+#neighbourhoods <- read.csv(paste0(data_dir, "neighbourhoods.csv"))
+#reviews <- read.csv(paste0(data_dir, "reviews.csv"))
+#reviews2 <- read.csv(paste0(data_dir, "reviews 2.csv"))
+
+listing <- read.csv(paste0("/Users/loganheft/Desktop/data-2/listings.csv"))
+listing2 <- read.csv(paste0("/Users/loganheft/Desktop/data-2/listings 2.csv"))
+neighbourhoods <- read.csv(paste0("/Users/loganheft/Desktop/data-2/neighbourhoods.csv"))
+reviews <- read.csv(paste0("/Users/loganheft/Desktop/data-2/reviews.csv"))
+reviews2 <- read.csv(paste0("/Users/loganheft/Desktop/data-2/reviews 2.csv"))
+
 ```
 Our data covers the quarterly data from last year.
 
@@ -57,6 +64,79 @@ sapply(data, function(x) sum(is.na(x)))
 
 ```
 
+#EDA
+``` {r}
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+
+
+# Summarize the numerical variables
+summary(data$price)
+summary(data$review_scores_rating)
+
+# Plot the distribution of the price variable
+ggplot(data, aes(price)) + 
+  geom_histogram() + 
+  xlim(0, 3000)
+
+ggplot(data, aes(price)) + 
+  geom_histogram() + 
+  xlim(0, 500)
+
+# Plot the relationship between price and number of bedrooms
+ggplot(data, aes(x = bedrooms, y = price)) + 
+  geom_point()
+
+# Show the average price for the top 20 most popular property types and sort the plot
+top_property_types <- data %>% 
+  group_by(property_type) %>% 
+  summarize(num_properties = n()) %>% 
+  top_n(20, num_properties)
+
+data %>% 
+  filter(property_type %in% top_property_types$property_type) %>% 
+  group_by(property_type) %>% 
+  summarize(avg_price = mean(price)) %>% 
+  arrange(desc(avg_price)) %>% # Sort by average price in descending order
+  ggplot(aes(x = property_type, y = avg_price)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(x = "Property Type", y = "Average Price")
+
+# Get the top 20 neighborhoods by average price
+top_neighborhoods <- data %>% 
+  group_by(neighbourhood) %>% 
+  summarize(avg_price = mean(price)) %>% 
+  top_n(20, avg_price)
+
+data %>% 
+  filter(neighbourhood %in% top_neighborhoods$neighbourhood) %>% 
+  group_by(neighbourhood) %>% 
+  summarize(avg_price = mean(price)) %>% 
+  ggplot(aes(x = reorder(neighbourhood, -avg_price), y = avg_price)) +
+  geom_col() +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8)) +
+  theme(plot.margin = unit(c(1, 1, 1, 1), "cm")) +
+  labs(x = "Neighborhood", y = "Average Price")
+
+
+
+# Create a new variable for the month of the year
+data$month <- month(ymd(data$last_review))
+
+# Plot the number of reviews by month
+data %>% 
+  group_by(month) %>% 
+  summarize(num_reviews = n()) %>% 
+  ggplot(aes(x = month, y = num_reviews)) +
+  geom_line() +
+  scale_x_continuous(breaks = 1:12, labels = month.abb)
+
+
+
+```
 
 
 
