@@ -47,6 +47,9 @@ There some missing values, especially in the ratings variables. We will use MICE
 ``` {r}
 library(mice)
 
+data <- data %>%
+  filter(price < quantile(price, 0.99))
+
 # Select variables with missing values
 vars <- c("bedrooms", "beds", "review_scores_rating", "review_scores_accuracy", 
           "review_scores_cleanliness", "review_scores_checkin", "review_scores_communication", 
@@ -70,6 +73,8 @@ library(tidyverse)
 library(lubridate)
 library(ggplot2)
 
+data <- data %>%
+  filter(price < quantile(price, 0.99))
 
 # Summarize the numerical variables
 summary(data$price)
@@ -138,5 +143,52 @@ data %>%
 
 ```
 
+```{r}
+# Load the necessary libraries and read in the data
+library(dplyr)
+library(psych)
+library(corrplot)
+data <- read.csv("path/to/airbnb/dataset.csv")
+
+# Remove outliers
+data <- data %>%
+  filter(price < quantile(price, 0.99))
+
+# Perform a linear regression to predict price
+#If somebody wants to do some preprocessing of the data then we can use more factors
+#I only wrote the code for the initial leg work
 
 
+model <- lm(price ~ accommodates + bedrooms + review_scores_rating, data = data)
+summary(model)
+
+data <- na.omit(data)
+
+# Perform a principal component analysis
+pca <- prcomp(data[,c("accommodates", "bedrooms", "review_scores_rating")], center = TRUE, scale. = TRUE)
+
+summary(pca)
+
+plot(pca)
+
+#principal components
+pca$rotation
+
+# principal component scores for each observation
+pca$x
+
+fa_result <- factanal(data[,c("accommodates", "bedrooms", "review_scores_rating")], factors = 1, rotation = "varimax")
+
+#factor loadings
+print(fa_result$loadings)
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
