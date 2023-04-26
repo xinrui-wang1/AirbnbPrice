@@ -140,7 +140,84 @@ data %>%
   scale_x_continuous(breaks = 1:12, labels = month.abb)
 
 
+<<<<<<< Updated upstream
 
+=======
+# Remove original categorical columns
+df <- df[, !(colnames(df) %in% cat_columns)]
+
+# Clean amenities and create binary columns for each amenity
+df <- df %>%
+  mutate(amenities = str_remove_all(amenities, "\\[|\\]|\"")) %>%
+  separate_rows(amenities, sep = ", ") %>%
+  mutate(amenity_clean = clean_colnames(amenities)) %>%
+  mutate(amenities = paste0("amenity_", amenity_clean),
+         amenities = ifelse(substr(amenities, 1, 10) == "amenity__", substr(amenities, 10), amenities),
+         value = 1) %>%
+  distinct(id, amenities, .keep_all = TRUE)
+
+# Remove the 'amenity_clean' column
+df <- dplyr::select(df, -amenity_clean)
+
+## Keep only the top 100 amenities and additional amenities
+amenities_wide_df <- df %>% pivot_wider(names_from = amenities, values_from = value, values_fill = 0)
+amenity_columns <- grep("^amenity_", colnames(amenities_wide_df), value = TRUE)
+amenity_sums <- colSums(amenities_wide_df[amenity_columns], na.rm = TRUE)
+sorted_amenities <- sort(amenity_sums, decreasing = TRUE)
+top_100_amenities <- names(sorted_amenities)[1:100]
+additional_amenities <- amenity_columns[grep("(pool|tennis|gym)", amenity_columns)]
+top_amenities_with_additional <- unique(c(top_100_amenities, additional_amenities))
+df_top_amenities_with_additional <- amenities_wide_df %>% dplyr::select(c("id", top_amenities_with_additional))
+non_amenity_columns <- grep("^amenity_", colnames(amenities_wide_df), value = TRUE, invert = TRUE)
+df_non_amenity <- amenities_wide_df %>%  dplyr::select(non_amenity_columns)
+df_final_joined <- df_non_amenity %>% left_join(df_top_amenities_with_additional, by = "id")
+
+# Remove outliers from the train_set dataframe using the IQR method
+Q1 <- quantile(df_final_joined$price, 0.25)
+Q3 <- quantile(df_final_joined$price, 0.75)
+IQR <- Q3 - Q1
+lower_bound <- Q1 - 2.5 * IQR
+upper_bound <- Q3 + 2.5 * IQR
+
+# Plot the histogram before removing outliers
+ggplot(df_final_joined, aes(x = price)) +
+  geom_histogram(bins = 100) +
+  xlim(0, 5000) +
+  ylim(0,3000)
+
+# Filter the data to remove the outliers
+AirBnB_data <- df_final_joined[(df_final_joined$price >= lower_bound) & (df_final_joined$price <= upper_bound), ]
+
+# Plot the histogram after removing outliers
+ggplot(AirBnB_data, aes(x = price)) +
+  geom_histogram(bins = 100) +
+  xlim(0, 750)
+
+# Set the filenames for the train and test data files
+train_filename <- paste0(data_dir, "train_data.csv")
+test_filename <- paste0(data_dir, "test_data.csv")
+
+# Check if the train and test data files exist in the directory
+if (!file.exists(train_filename) || !file.exists(test_filename)) {
+  # If either file does not exist, split the data into train and test sets
+  set.seed(123)
+  split_index <- createDataPartition(AirBnB_data$id, p = 0.8, list = FALSE)
+  train_data <- AirBnB_data[split_index, ]
+  test_data <- AirBnB_data[-split_index, ]
+  
+  # Save the train and test sets to CSV files
+  write.csv(train_data, paste0(data_dir,"train_data.csv"), row.names = FALSE)
+  write.csv(test_data, paste0(data_dir,"test_data.csv"), row.names = FALSE)
+} else {
+  # If both files exist, read the train and test data sets from the files
+  train_data <- read.csv(train_filename)
+  test_data <- read.csv(test_filename)
+}
+
+# Print the dimensions of the train and test data sets
+cat("Train data dimensions:", dim(train_data), "\n")
+cat("Test data dimensions:", dim(test_data), "\n")
+>>>>>>> Stashed changes
 ```
 
 ```{r}
@@ -154,6 +231,73 @@ data <- read.csv("path/to/airbnb/dataset.csv")
 data <- data %>%
   filter(price < quantile(price, 0.99))
 
+<<<<<<< Updated upstream
+=======
+# Define the stopping criterion to find the top N features
+max_features <- 200  # Change this value to the desired number of features
+
+forward_result <- stepAIC(
+nullmodel,
+direction = "forward",
+trace = FALSE,
+scope = list(lower = nullmodel, upper = model),
+k = 2,
+steps = max_features)
+
+  
+# Set the filename for the RDS file
+filename <- paste0(data_dir, "forward_result.rds")
+
+# Check if the RDS file exists in the directory
+if (file.exists(filename)) {
+  # If the file exists, load the object from the file
+  forward_result <- readRDS(filename)
+} else {
+  # If the file does not exist, run the stepAIC function to generate the forward_result object
+  forward_result <- stepAIC(
+  nullmodel,
+  direction = "forward",
+  trace = FALSE,
+  scope = list(lower = nullmodel, upper = model),
+  k = 2,
+  steps = max_features)
+  
+  # Save the forward_result object as an RDS file
+  saveRDS(forward_result, filename)
+}
+
+# Print a summary of the forward_result object
+summary(forward_result)
+
+selected_names <- names(coef(forward_result))[-1]  # exclude the intercept
+selected_names <- gsub(" ", "_", selected_names)
+selected_names <- gsub("`", "", selected_names)
+
+# rename variables with spaces in their names
+names(train_data)[grep(" ", names(train_data))] <- gsub(" ", "", names(train_data)[grep(" ", names(train_data))])
+
+# create a new data frame with only the selected variables
+train_data <- train_data[, c("price", "review_scores_checkin", "review_scores_communication", "review_scores_rating", "review_scores_accuracy", selected_names)]
+test_data <- test_data[, c("price", "review_scores_checkin", "review_scores_communication", "review_scores_rating", "review_scores_accuracy", selected_names)]
+
+# create a new data frame with only the selected variables - price
+train_set_no_price <- train_data[, c("review_scores_checkin", "review_scores_communication", "review_scores_rating", "review_scores_accuracy", selected_names)]
+test_set_no_price <- test_data[, c("review_scores_checkin", "review_scores_communication", "review_scores_rating", "review_scores_accuracy", selected_names)]
+
+#test labels
+test_labels <- test_data$price
+train_labels <- train_data$price
+```
+
+#Predictive Models
+```{r}
+#checks for linearity
+
+
+
+
+#Linear Regression
+>>>>>>> Stashed changes
 # Perform a linear regression to predict price
 #If somebody wants to do some preprocessing of the data then we can use more factors
 #I only wrote the code for the initial leg work
