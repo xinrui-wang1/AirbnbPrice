@@ -4,23 +4,25 @@ output: html_document
 date: "2023-04-16"
 ---
 
-```{r setup, include=FALSE}
+```{r}
 knitr::opts_chunk$set(echo = TRUE)
 library(mice)
 library(dplyr)
 library(tidyr)
-library(jsonlite)
 library(tidytext)
 library(stringr)
-library(dplyr)
-library(psych)
 library(tidyverse)
 library(lubridate)
 library(ggplot2)
 library(corrplot)
+library(MASS)
+library(glmnet)
+library(caret)
+library(Metrics)
 ```
 
-# Load Data
+#Load Data
+
 ```{r}
 data_dir <- "../data/"
 listing <- read.csv(paste0(data_dir,"listings.csv"))
@@ -29,17 +31,11 @@ neighbourhoods <- read.csv(paste0(data_dir, "neighbourhoods.csv"))
 reviews <- read.csv(paste0(data_dir, "reviews.csv"))
 reviews2 <- read.csv(paste0(data_dir, "reviews 2.csv"))
 
-#listing <- read.csv(paste0("/Users/loganheft/Desktop/data-2/listings.csv"))
-#listing2 <- read.csv(paste0("/Users/loganheft/Desktop/data-2/listings 2.csv"))
-#neighbourhoods <- read.csv(paste0("/Users/loganheft/Desktop/data-2/neighbourhoods.csv"))
-#reviews <- read.csv(paste0("/Users/loganheft/Desktop/data-2/reviews.csv"))
-#reviews2 <- read.csv(paste0("/Users/loganheft/Desktop/data-2/reviews 2.csv"))
-
+# The data covers the quarterly data from 2022
 ```
-Our data covers the quarterly data from 2022.
 
-# Data Preparation
-``` {r}
+#Data Preparation
+```{r}
 # Select relevant features
 listing_col <- c("id", "neighbourhood_group", "neighbourhood", "latitude", "longitude", "room_type", "price")
 listing2_col <- c("id", "property_type", "accommodates", "bedrooms", "beds", "amenities", "review_scores_rating",
@@ -55,145 +51,43 @@ data <- merge(listing_sub, listing2_sub, by = "id", all.x = TRUE)
 print("Missing values:")
 colSums(is.na(data))
 ```
-There some missing values, especially in the ratings variables. We will use MICE imputation to impute the missing values.
-``` {r}
 
-# Select variables with missing values
-vars <- c("bedrooms", "beds", "review_scores_rating", "review_scores_accuracy", 
-          "review_scores_cleanliness", "review_scores_checkin", "review_scores_communication", 
-          "review_scores_location", "review_scores_value")
-
-# Perform MICE imputation
-imp <- mice(data[, vars], method = "pmm", m = 5, maxit = 50, seed = 12)
-
-
-# Replace the missing values in the original dataset with the imputed values
-data[, vars] <- complete(imp)
-
-# Check for any remaining missing values
-sapply(data, function(x) sum(is.na(x)))
-
-```
-
-
+#Impute missing values using MICE imputation
 ```{r}
-library(dplyr)
-library(tidyr)
-library(stringr)
-library(fuzzyjoin)
+# Set the filename for the imputed data file
+filename <- paste0(data_dir,"imputed_df.csv")
 
-# Save the dataframe to a CSV file
-write.csv(data, "imputed_data.csv", row.names = FALSE)
-
-# Function to clean the column names
-clean_colnames <- function(x) {
-  x <- tolower(x)
-  x <- str_remove_all(x, "[[:punct:]]")
-  x
+# Check if the imputed data file exists in the directory
+if (file.exists(filename)) {
+  # If the file exists, read it into a data frame
+  data <- read.csv(filename)
+} else {
+  # If the file does not exist, perform MICE imputation to generate the imputed data frame
+  # Select variables with missing values
+  vars <- c("bedrooms", "beds", "review_scores_rating", "review_scores_accuracy", 
+            "review_scores_cleanliness", "review_scores_checkin", "review_scores_communication", 
+            "review_scores_location", "review_scores_value")
+  
+  # Perform MICE imputation
+  imp <- mice(data[, vars], method = "pmm", m = 5, maxit = 50, seed = 12)
+  
+  # Replace the missing values in the original dataset with the imputed values
+  data[, vars] <- complete(imp)
+  
+  # Check for any remaining missing values
+  sapply(data, function(x) sum(is.na(x)))
+  
+  # Save the imputed data frame to a CSV file
+  write.csv(data, paste0(data_dir,"imputed_df.csv"), row.names = FALSE)
 }
 
-# Read the CSV file
-df <- read.csv("imputed_data.csv")
-df <- head(df)
-
-# Convert instant_bookable to a binary numeric column
-#df$instant_bookable <- ifelse(df$instant_bookable == "t", 1, 0)
-
-# Create dummy variables for categorical columns
-cat_columns <- c("neighbourhood_group", "neighbourhood", "room_type", "property_type")
-
-for (col_name in cat_columns) {
-  dummy_matrix <- model.matrix(~ 0 + ., data = df[col_name])
-  colnames(dummy_matrix) <- gsub("^[^:]+:([^:]+)$", paste0(col_name, "_", "\\1"), colnames(dummy_matrix))
-  df <- cbind(df, dummy_matrix)
-  df[[col_name]] <- NULL
-}
-
-review_columns <- c("review_scores_rating", "review_scores_accuracy", "review_scores_cleanliness","review_scores_checkin","review_scores_communication", "review_scores_location", "review_scores_value")
-
-df[review_columns] <- apply(df[review_columns], 2, function(x) (x - min(x, na.rm = TRUE)) / (max(x, na.rm = TRUE) - min(x, na.rm = TRUE)))
-
-# Clean amenities and create binary columns for each amenit
-# Clean amenities and create binary columns for each amenity
-df <- df %>%
-  mutate(amenities = str_remove_all(amenities, "\\[|\\]|\"")) %>%
-  separate_rows(amenities, sep = ", ") %>%
-  mutate(amenity_clean = clean_colnames(amenities)) %>%
-  mutate(amenities = paste0("amenity_", amenity_clean),
-         amenities = ifelse(substr(amenities, 1, 10) == "amenity__", substr(amenities, 10), amenities),
-         value = 1) %>%
-  distinct(id, amenities, .keep_all = TRUE) %>%
-  select(-amenity_clean)
-
-#unique amenitites
-amenities_wide_df <- df %>% pivot_wider(names_from = amenities, values_from = value, values_fill = 0)
-
-df <-  amenities_wide_df
-# Select columns that start with "amenity_"
-amenity_cols <- grep("^amenity_", names(df), value = TRUE)
-
-amenity_df <- df %>%
-  select(id, amenity_cols) %>%
-  rename_at(vars(-id), ~sub("amenity_", "", .))
-
+# Print a summary of the imputed data frame
+summary(data)
 
 ```
 
-
-#Preprocessing
+#Exploratory Data Analysis (EDA)
 ```{r}
-# Load required packages
-# Read the data
-data <- amenity_df
-
-# Define a function to check if two columns contain a common word
-has_common_word <- function(x, y) {
-  x_words <- unlist(strsplit(names(data)[x], " "))
-  y_words <- unlist(strsplit(names(data)[y], " "))
-  any(x_words %in% y_words)
-}
-
-
-# Replace spaces and other characters with underscores in column names
-names(data)[-1] <- gsub("[[:punct:] ]+", "_", names(data)[-1])
-
-
-# Identify similar column pairs
-similar_pairs <- combn(ncol(data), 2, FUN = function(x) {
-  c(col1 = x[1], col2 = x[2], has_common_word(x[1], x[2]))
-}) %>% 
-  t() %>% 
-  as.data.frame() %>% 
-  set_names(c("col1", "col2", "similar")) %>% 
-  mutate(similar = as.logical(similar)) %>% 
-  filter(similar) %>% 
-  select(-similar)
-
-
-# Combine similar columns
-for (i in seq_len(nrow(similar_pairs))) {
-  col1 <- names(data)[similar_pairs$col1[i]]
-  col2 <- names(data)[similar_pairs$col2[i]]
-  new_col <- paste0(col1, "_", col2)
-  data <- unite(data, new_col, col1, col2, sep = "_")
-  data <- data %>% select(-c(col1, col2))
-  print(paste0("Combined columns ", col1, " and ", col2, " into ", new_col))
-}
-
-
-# View updated data
-data
-
-
-
-```
-
-
-#EDA
-``` {r}
-data <- data %>%
-  filter(price < quantile(price, 0.99))
-
 # Summarize the numerical variables
 summary(data$price)
 summary(data$review_scores_rating)
@@ -243,67 +137,381 @@ data %>%
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8)) +
   theme(plot.margin = unit(c(1, 1, 1, 1), "cm")) +
   labs(x = "Neighborhood", y = "Average Price")
-
-# Create a new variable for the month of the year
-data$month <- month(ymd(data$last_review))
-
-# Plot the number of reviews by month
-data %>% 
-  group_by(month) %>% 
-  summarize(num_reviews = n()) %>% 
-  ggplot(aes(x = month, y = num_reviews)) +
-  geom_line() +
-  scale_x_continuous(breaks = 1:12, labels = month.abb)
 ```
 
+#Data Preprocessing
 
-``` {r}
+```{r}
+# Function to clean the column names
+clean_colnames <- function(x) {
+  x <- tolower(x)
+  x <- str_remove_all(x, "[[:punct:]]")
+  x
+}
+
+# Read the CSV file
+df <- read.csv(paste0(data_dir,"imputed_df.csv"))
+               
+# Convert instant_bookable to a binary numeric column
+df$instant_bookable <- ifelse(df$instant_bookable == "t", 1, 0)
+
+# Create dummy variables for categorical columns
+cat_columns <- c("neighbourhood_group", "neighbourhood", "room_type", "property_type")
+
+for (col_name in cat_columns) {
+  dummy_matrix <- model.matrix(~ 0 + ., data = df[col_name])
+  colnames(dummy_matrix) <- gsub("^[^:]+:([^:]+)$", paste0(col_name, "_"), colnames(dummy_matrix))
+  dummy_df <- as.data.frame(dummy_matrix)
+  df <- cbind(df, dummy_df)
+}
+
+# Remove original categorical columns
+df <- df[, !(colnames(df) %in% cat_columns)]
+
+# Clean amenities and create binary columns for each amenity
+df <- df %>%
+  mutate(amenities = str_remove_all(amenities, "\\[|\\]|\"")) %>%
+  separate_rows(amenities, sep = ", ") %>%
+  mutate(amenity_clean = clean_colnames(amenities)) %>%
+  mutate(amenities = paste0("amenity_", amenity_clean),
+         amenities = ifelse(substr(amenities, 1, 10) == "amenity__", substr(amenities, 10), amenities),
+         value = 1) %>%
+  distinct(id, amenities, .keep_all = TRUE)
+
+# Remove the 'amenity_clean' column
+df <- dplyr::select(df, -amenity_clean)
+
+## Keep only the top 100 amenities and additional amenities
+amenities_wide_df <- df %>% pivot_wider(names_from = amenities, values_from = value, values_fill = 0)
+amenity_columns <- grep("^amenity_", colnames(amenities_wide_df), value = TRUE)
+amenity_sums <- colSums(amenities_wide_df[amenity_columns], na.rm = TRUE)
+sorted_amenities <- sort(amenity_sums, decreasing = TRUE)
+top_100_amenities <- names(sorted_amenities)[1:100]
+additional_amenities <- amenity_columns[grep("(pool|tennis|gym)", amenity_columns)]
+top_amenities_with_additional <- unique(c(top_100_amenities, additional_amenities))
+df_top_amenities_with_additional <- amenities_wide_df %>% dplyr::select(c("id", top_amenities_with_additional))
+non_amenity_columns <- grep("^amenity_", colnames(amenities_wide_df), value = TRUE, invert = TRUE)
+df_non_amenity <- amenities_wide_df %>%  dplyr::select(non_amenity_columns)
+df_final_joined <- df_non_amenity %>% left_join(df_top_amenities_with_additional, by = "id")
+
+# Remove outliers from the train_set dataframe using the IQR method
+Q1 <- quantile(df_final_joined$price, 0.25)
+Q3 <- quantile(df_final_joined$price, 0.75)
+IQR <- Q3 - Q1
+lower_bound <- Q1 - 2.5 * IQR
+upper_bound <- Q3 + 2.5 * IQR
+
+# Plot the histogram before removing outliers
+ggplot(df_final_joined, aes(x = price)) +
+  geom_histogram(bins = 100) +
+  xlim(0, 5000) +
+  ylim(0,3000)
+
+# Filter the data to remove the outliers
+AirBnB_data <- df_final_joined[(df_final_joined$price >= lower_bound) & (df_final_joined$price <= upper_bound), ]
+
+# Plot the histogram after removing outliers
+ggplot(AirBnB_data, aes(x = price)) +
+  geom_histogram(bins = 100) +
+  xlim(0, 750)
+
+# Set the filenames for the train and test data files
+train_filename <- paste0(data_dir, "train_data.csv")
+test_filename <- paste0(data_dir, "test_data.csv")
+
+# Check if the train and test data files exist in the directory
+if (!file.exists(train_filename) || !file.exists(test_filename)) {
+  # If either file does not exist, split the data into train and test sets
+  set.seed(123)
+  split_index <- createDataPartition(AirBnB_data$id, p = 0.8, list = FALSE)
+  train_data <- AirBnB_data[split_index, ]
+  test_data <- AirBnB_data[-split_index, ]
+  
+  # Save the train and test sets to CSV files
+  write.csv(train_data, paste0(data_dir,"train_data.csv"), row.names = FALSE)
+  write.csv(test_data, paste0(data_dir,"test_data.csv"), row.names = FALSE)
+} else {
+  # If both files exist, read the train and test data sets from the files
+  train_data <- read.csv(train_filename)
+  test_data <- read.csv(test_filename)
+}
+
+# Print the dimensions of the train and test data sets
+cat("Train data dimensions:", dim(train_data), "\n")
+cat("Test data dimensions:", dim(test_data), "\n")
 
 ```
 
 ```{r}
-# Load the necessary libraries and read in the data
-data <- read.csv("path/to/airbnb/dataset.csv")
+# Read the CSV file
+train_data <- read.csv(paste0(data_dir,"train_data.csv"))
+test_data <- read.csv(paste0(data_dir,"test_data.csv"))
 
-# Remove outliers
-data <- data %>%
-  filter(price < quantile(price, 0.99))
 
+# Define the linear regression model (replace "target" with your actual target variable)
+nullmodel <- lm(price ~ 1, data = train_data[, -1])
+model <- lm(price ~ ., data = train_data[, -1])
+
+# Define the stopping criterion to find the top 100 features
+stop_criteria <- function(curr_model) {
+  selected_features <- names(summary(curr_model)$coefficients[-1, , drop = FALSE])
+  if (length(selected_features) >= 100) {
+    return(curr_model)
+  }
+  return(NA)
+}
+
+# Perform forward selection to find the top 100 features
+forward_result <- stepAIC(nullmodel, direction = "forward", trace = FALSE, scope = list(lower = nullmodel, upper = model), criterion = stop_criteria)
+summary(forward_result)
+```
+
+```{r}
+# Set the filename for the RDS file
+filename <- paste0(data_dir, "forward_result.rds")
+
+# Check if the RDS file exists in the directory
+if (file.exists(filename)) {
+  # If the file exists, load the object from the file
+  forward_result <- readRDS(filename)
+} else {
+  # If the file does not exist, run the stepAIC function to generate the forward_result object
+  forward_result <- stepAIC(nullmodel, direction = "forward", trace = FALSE, scope = list(lower = nullmodel, upper = model), criterion = stop_criteria)
+  
+  # Save the forward_result object as an RDS file
+  saveRDS(forward_result, filename)
+}
+
+# Print a summary of the forward_result object
+summary(forward_result)
+
+selected_names <- names(coef(forward_result))[-1]  # exclude the intercept
+selected_names <- gsub(" ", "_", selected_names)
+selected_names <- gsub("`", "", selected_names)
+
+# rename variables with spaces in their names
+names(train_data)[grep(" ", names(train_data))] <- gsub(" ", "", names(train_data)[grep(" ", names(train_data))])
+
+# create a new data frame with only the selected variables
+train_data <- train_data[, c("price", "review_scores_checkin", "review_scores_communication", "review_scores_value", "review_scores_rating", "review_scores_accuracy", "review_scores_cleanliness", selected_names)]
+test_data <- test_data[, c("price", "review_scores_checkin", "review_scores_communication", "review_scores_value", "review_scores_rating", "review_scores_accuracy", "review_scores_cleanliness", selected_names)]
+
+# create a new data frame with only the selected variables - price
+train_set_no_price <- train_data[, c("review_scores_checkin", "review_scores_communication", "review_scores_value", "review_scores_rating", "review_scores_accuracy", "review_scores_cleanliness", selected_names)]
+test_set_no_price <- test_data[, c("review_scores_checkin", "review_scores_communication", "review_scores_value", "review_scores_rating", "review_scores_accuracy", "review_scores_cleanliness", selected_names)]
+
+#test labels
+test_labels <- test_data$price
+train_labels <- train_data$price
+```
+
+#Predictive Models
+```{r}
+#Linear Regression
 # Perform a linear regression to predict price
-#If somebody wants to do some preprocessing of the data then we can use more factors
-#I only wrote the code for the initial leg work
-
-
-model <- lm(price ~ accommodates + bedrooms + review_scores_rating, data = data)
+model <- lm(price ~., data = train_data)
 summary(model)
+----------------------------------------------------
+#PCA
+# Identify the numeric variables
+numeric_vars <- sapply(train_set_no_price, is.numeric)
 
-data <- na.omit(data)
+# Perform PCA on all numeric variables
+pca_all_numeric <- prcomp(train_set_no_price[, numeric_vars], center = TRUE, scale. = TRUE)
 
-# Perform a principal component analysis
-pca <- prcomp(data[,c("accommodates", "bedrooms", "review_scores_rating")], center = TRUE, scale. = TRUE)
+# Summary and plot of the PCA results
+summary(pca_all_numeric)
+plot(pca_all_numeric)
 
-summary(pca)
+# Principal components
+pca_all_numeric$rotation
 
-plot(pca)
+# Principal component scores for each observation
+pca_all_numeric$x
+----------------------------------------------------
+#Factor Analysis
+# Identify the numeric variables
+numeric_vars <- sapply(train_set_no_price, is.numeric)
 
-#principal components
-pca$rotation
+# Standardize the numeric variables
+scaled_data <- scale(train_set_no_price[, numeric_vars])
 
-# principal component scores for each observation
-pca$x
+# Perform factor analysis
+# You can change the number of factors in the 'factors' argument
+n_factors <- 2
+fa_result <- factanal(scaled_data, factors = n_factors, rotation = "varimax")
 
-fa_result <- factanal(data[,c("accommodates", "bedrooms", "review_scores_rating")], factors = 1, rotation = "varimax")
-
-#factor loadings
+# Factor loadings
 print(fa_result$loadings)
 
+# Factor scores for each observation
+fa_scores <- fa_result$scores
+----------------------------------------------------
+#Lasso
+# Prepare the data
+x <- as.matrix(train_set_no_price)
+y <- train_labels
+
+# Perform LASSO
+alpha_lasso <- 1
+lasso_model <- glmnet(x, y, alpha = alpha_lasso)
+
+# Perform cross-validation to choose the best lambda value
+cv_lasso <- cv.glmnet(x, y, alpha = alpha_lasso)
+best_lambda <- cv_lasso$lambda.min
+
+# Refit the LASSO model with the best lambda
+lasso_model_best <- glmnet(x, y, alpha = alpha_lasso, lambda = best_lambda)
+
+# Examine the results
+coef(lasso_model_best)
 ```
 
+# ------------------------------------------
+# Analysis - Plots
+# ------------------------------------------
+
+```{r}
+# Linear regression residuals
+linear_regression_preds <- predict(model, test_set_no_price)
+linear_regression_residuals <- test_labels - linear_regression_preds
+
+# LASSO regression residuals
+lasso_preds <- predict(lasso_model_best, as.matrix(test_set_no_price))
+lasso_residuals <- test_labels - lasso_preds
+
+# Residual plots
+par(mfrow = c(1, 2)) # Arrange plots in a 1x2 grid
+plot(linear_regression_residuals, main = "Linear Regression Residuals", ylab = "Residuals", xlab = "Index")
+plot(lasso_residuals, main = "LASSO Regression Residuals", ylab = "Residuals", xlab = "Index")
+
+# Prediction vs. actual plots
+par(mfrow = c(1, 2)) # Arrange plots in a 1x2 grid
+plot(test_labels, linear_regression_preds, main = "Linear Regression", xlab = "Actual", ylab = "Predicted")
+abline(0, 1, col = "red") # Add a 45-degree reference line
+plot(test_labels, lasso_preds, main = "LASSO Regression", xlab = "Actual", ylab = "Predicted")
+abline(0, 1, col = "red") # Add a 45-degree reference line
+
+# PCA biplot
+biplot(pca, main = "PCA Biplot")
+
+# Factor analysis loadings plot
+library(ggplot2)
+loadings_df <- as.data.frame(fa_result$loadings)
+loadings_df$variable <- rownames(fa_result$loadings)
+loadings_long <- tidyr::gather(loadings_df, factor, loading, -variable)
+
+ggplot(loadings_long, aes(x = factor, y = variable, fill = loading, size = abs(loading))) +
+  geom_point(shape = 21) +
+  scale_size_continuous(range = c(1, 8)) +
+  theme_minimal() +
+  labs(title = "Factor Loadings Plot")
+
+# PCA and factor analysis scree plots
+par(mfrow = c(1, 2)) # Arrange plots in a 1x2 grid
+
+# PCA scree plot
+pca_pve <- (pca$sdev^2) / sum(pca$sdev^2)
+plot(pca_pve, type = "b", main = "PCA Scree Plot", xlab = "Principal Component", ylab = "Proportion of Variance Explained")
+abline(v = which.max(diff(pca_pve)), col = "red", lty = 2) # Add a vertical line at the elbow point
+
+# Factor analysis scree plot
+fa_eigenvalues <- fa_result$e.values[, 1] / sum(fa_result$e.values[, 1])
+plot(fa_eigenvalues, type = "b", main = "Factor Analysis Scree Plot", xlab = "Factor", ylab = "Proportion of Variance Explained")
+abline(v = which.max(diff(fa_eigenvalues)), col = "red", lty = 2) # Add a vertical line at the elbow point
+
+```
+
+# ------------------------------------------
+# Analysis - Metrics
+# ------------------------------------------
 
 ```{r}
 
+# Calculate performance metrics
+linear_regression_mse <- mse(test_labels, linear_regression_preds)
+lasso_mse <- mse(test_labels, lasso_preds)
+
+linear_regression_mae <- mae(test_labels, linear_regression_preds)
+lasso_mae <- mae(test_labels, lasso_preds)
+
+cat("Linear Regression MSE:", linear_regression_mse, "MAE:", linear_regression_mae, "\n")
+cat("LASSO Regression MSE:", lasso_mse, "MAE:", lasso_mae, "\n")
+
+# PCA proportion of variance explained
+pca_pve <- (pca$sdev^2) / sum(pca$sdev^2)
+cat("PCA Proportion of Variance Explained:", pca_pve, "\n")
+
+# Factor analysis proportion of variance explained
+fa_pve <- fa_result$SS.loadings / sum(fa_result$SS.loadings)
+cat("Factor Analysis Proportion of Variance Explained:", fa_pve, "\n")
+
+# PCA cumulative proportion of variance explained
+pca_cumulative_pve <- cumsum(pca_pve)
+cat("PCA Cumulative Proportion of Variance Explained:", pca_cumulative_pve, "\n")
+
+# Factor analysis cumulative proportion of variance explained
+fa_cumulative_pve <- cumsum(fa_pve)
+cat("Factor Analysis Cumulative Proportion of Variance Explained:", fa_cumulative_pve, "\n")
+
+# Linear regression metrics
+linear_preds <- predict(model, newdata = test_data)
+linear_rmse <- sqrt(mean((test_labels - linear_preds)^2))
+linear_mae <- mean(abs(test_labels - linear_preds))
+linear_r2 <- cor(test_labels, linear_preds)^2
+
+# LASSO metrics
+lasso_preds <- predict(lasso_model_best, as.matrix(test_set_no_price))
+lasso_rmse <- sqrt(mean((test_labels - lasso_preds)^2))
+lasso_mae <- mean(abs(test_labels - lasso_preds))
+lasso_r2 <- cor(test_labels, lasso_preds)^2
+
+# Evaluation summary
+evaluation <- data.frame(Model = c("Linear Regression", "LASSO"),
+                         RMSE = c(linear_rmse, lasso_rmse),
+                         MAE = c(linear_mae, lasso_mae),
+                         R2 = c(linear_r2, lasso_r2))
+print(evaluation)
+
 ```
 
-```{r}
 
-```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
