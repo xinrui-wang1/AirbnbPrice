@@ -262,16 +262,16 @@ model <- lm(price ~ ., data = train_data[, -1])
 # Define the stopping criterion to find the top N features
 max_features <- 200  # Change this value to the desired number of features
 
-forward_result <- stepAIC(
-nullmodel,
-direction = "forward",
-trace = FALSE,
-scope = list(lower = nullmodel, upper = model),
-k = 2,
-steps = max_features)
+#forward_result <- stepAIC(
+#nullmodel,
+#direction = "forward",
+#trace = FALSE,
+#scope = list(lower = nullmodel, upper = model),
+#k = 2,
+#steps = max_features)
 
 # Save the forward_result object as an RDS file
-saveRDS(forward_result, filename)
+#saveRDS(forward_result, filename)
 
 # Set the filename for the RDS file
 filename <- paste0(data_dir, "forward_result.rds")
@@ -307,12 +307,12 @@ selected_names <- gsub("`", "", selected_names)
 names(train_data)[grep(" ", names(train_data))] <- gsub(" ", "", names(train_data)[grep(" ", names(train_data))])
 
 # create a new data frame with only the selected variables
-train_data <- train_data[, c("price", "review_scores_checkin", "review_scores_communication", "review_scores_value", "review_scores_rating", "review_scores_accuracy", "review_scores_cleanliness", selected_names)]
-test_data <- test_data[, c("price", "review_scores_checkin", "review_scores_communication", "review_scores_value", "review_scores_rating", "review_scores_accuracy", "review_scores_cleanliness", selected_names)]
+train_data <- train_data[, c("price", "review_scores_checkin", "review_scores_communication", "review_scores_rating", "review_scores_accuracy", selected_names)]
+test_data <- test_data[, c("price", "review_scores_checkin", "review_scores_communication", "review_scores_rating", "review_scores_accuracy",  selected_names)]
 
 # create a new data frame with only the selected variables - price
-train_set_no_price <- train_data[, c("review_scores_checkin", "review_scores_communication", "review_scores_value", "review_scores_rating", "review_scores_accuracy", "review_scores_cleanliness", selected_names)]
-test_set_no_price <- test_data[, c("review_scores_checkin", "review_scores_communication", "review_scores_value", "review_scores_rating", "review_scores_accuracy", "review_scores_cleanliness", selected_names)]
+train_set_no_price <- train_data[, c("review_scores_checkin", "review_scores_communication",  "review_scores_rating", "review_scores_accuracy",  selected_names)]
+test_set_no_price <- test_data[, c("review_scores_checkin", "review_scores_communication", "review_scores_rating", "review_scores_accuracy", selected_names)]
 
 #test labels
 test_labels <- test_data$price
@@ -491,44 +491,3 @@ evaluation <- data.frame(Model = c("Linear Regression", "LASSO"),
 print(evaluation)
 
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
