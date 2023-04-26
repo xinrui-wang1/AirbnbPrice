@@ -244,26 +244,27 @@ cat("Test data dimensions:", dim(test_data), "\n")
 
 ```{r}
 # Read the CSV file
-train_data <- read.csv(paste0(data_dir,"train_data.csv"))
-test_data <- read.csv(paste0(data_dir,"test_data.csv"))
+train_data <- read.csv(paste0(data_dir, "train_data.csv"))
+test_data <- read.csv(paste0(data_dir, "test_data.csv"))
 
-
-# Define the linear regression model (replace "target" with your actual target variable)
+# Define the linear regression model (replace "price" with your actual target variable if needed)
 nullmodel <- lm(price ~ 1, data = train_data[, -1])
 model <- lm(price ~ ., data = train_data[, -1])
 
-# Define the stopping criterion to find the top 100 features
-stop_criteria <- function(curr_model) {
-  selected_features <- names(summary(curr_model)$coefficients[-1, , drop = FALSE])
-  if (length(selected_features) >= 100) {
-    return(curr_model)
-  }
-  return(NA)
-}
+# Define the stopping criterion to find the top N features
+max_features <- 100  # Change this value to the desired number of features
 
-# Perform forward selection to find the top 100 features
-forward_result <- stepAIC(nullmodel, direction = "forward", trace = FALSE, scope = list(lower = nullmodel, upper = model), criterion = stop_criteria)
+# Perform forward selection to find the top N features
+forward_result <- stepAIC(
+  nullmodel,
+  direction = "forward",
+  trace = FALSE,
+  scope = list(lower = nullmodel, upper = model),
+  k = 2,
+  steps = max_features)
+
 summary(forward_result)
+
 ```
 
 ```{r}
