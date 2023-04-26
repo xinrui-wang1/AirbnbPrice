@@ -1,5 +1,5 @@
 ---
-title: "main"
+title: "AirBnB"
 output: html_document
 date: "2023-04-16"
 ---
@@ -262,16 +262,10 @@ model <- lm(price ~ ., data = train_data[, -1])
 # Define the stopping criterion to find the top N features
 max_features <- 200  # Change this value to the desired number of features
 
-#forward_result <- stepAIC(
-#nullmodel,
-#direction = "forward",
-#trace = FALSE,
-#scope = list(lower = nullmodel, upper = model),
-#k = 2,
-#steps = max_features)
+forward_result <- stepAIC(nullmodel, direction = "forward", trace = FALSE, scope = list(lower = nullmodel, upper = model), k = 2, steps = max_features)
 
 # Save the forward_result object as an RDS file
-#saveRDS(forward_result, filename)
+saveRDS(forward_result, filename)
 
 # Set the filename for the RDS file
 filename <- paste0(data_dir, "forward_result.rds")
@@ -284,13 +278,8 @@ if (file.exists(filename)) {
 } else {
   
   # If the file does not exist, run the stepAIC function to generate the forward_result object
-  forward_result <- stepAIC(
-  nullmodel,
-  direction = "forward",
-  trace = FALSE,
-  scope = list(lower = nullmodel, upper = model),
-  k = 2,
-  steps = max_features)
+  forward_result <- stepAIC(nullmodel, direction = "forward", trace = FALSE, scope = list(lower = nullmodel, upper = model), k = 2, steps = max_features)
+
   
   # Save the forward_result object as an RDS file
   saveRDS(forward_result, filename)
