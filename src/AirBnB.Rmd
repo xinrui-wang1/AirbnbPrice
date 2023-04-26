@@ -347,8 +347,6 @@ pca_all_numeric$rotation
 pca_all_numeric$x
 ----------------------------------------------------
 #Factor Analysis
-# Identify the numeric variables
-numeric_vars <- sapply(train_set_no_price, is.numeric)
 
 # Standardize the numeric variables
 scaled_data <- scale(train_set_no_price[, numeric_vars])
@@ -446,17 +444,8 @@ abline(v = which.max(diff(fa_eigenvalues)), col = "red", lty = 2) # Add a vertic
 ```{r}
 
 # Calculate performance metrics
-linear_regression_mse <- mse(test_labels, linear_regression_preds)
-lasso_mse <- mse(test_labels, lasso_preds)
-
-linear_regression_mae <- mae(test_labels, linear_regression_preds)
-lasso_mae <- mae(test_labels, lasso_preds)
-
-cat("Linear Regression MSE:", linear_regression_mse, "MAE:", linear_regression_mae, "\n")
-cat("LASSO Regression MSE:", lasso_mse, "MAE:", lasso_mae, "\n")
-
 # PCA proportion of variance explained
-pca_pve <- (pca$sdev^2) / sum(pca$sdev^2)
+pca_pve <- (pca_all_numeric$sdev^2) / sum(pca_all_numeric$sdev^2)
 cat("PCA Proportion of Variance Explained:", pca_pve, "\n")
 
 # Factor analysis proportion of variance explained
@@ -477,11 +466,21 @@ linear_rmse <- sqrt(mean((test_labels - linear_preds)^2))
 linear_mae <- mean(abs(test_labels - linear_preds))
 linear_r2 <- cor(test_labels, linear_preds)^2
 
+linear_regression_mse <- mse(test_labels, linear_preds)
+lasso_mse <- mse(test_labels, lasso_preds)
+linear_regression_mae <- mae(test_labels, linear_preds)
+lasso_mae <- mae(test_labels, lasso_preds)
+
+cat("Linear Regression MSE:", linear_regression_mse, "MAE:", linear_regression_mae, "\n")
+cat("LASSO Regression MSE:", lasso_mse, "MAE:", lasso_mae, "\n")
+
 # LASSO metrics
 lasso_preds <- predict(lasso_model_best, as.matrix(test_set_no_price))
 lasso_rmse <- sqrt(mean((test_labels - lasso_preds)^2))
 lasso_mae <- mean(abs(test_labels - lasso_preds))
 lasso_r2 <- cor(test_labels, lasso_preds)^2
+
+
 
 # Evaluation summary
 evaluation <- data.frame(Model = c("Linear Regression", "LASSO"),
