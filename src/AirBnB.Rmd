@@ -151,7 +151,6 @@ data %>%
 ```
 
 #Data Preprocessing
-
 ```{r}
 # Function to clean the column names
 clean_colnames <- function(x) {
@@ -262,11 +261,6 @@ model <- lm(price ~ ., data = train_data[, -1])
 # Define the stopping criterion to find the top N features
 max_features <- 200  # Change this value to the desired number of features
 
-forward_result <- stepAIC(nullmodel, direction = "forward", trace = FALSE, scope = list(lower = nullmodel, upper = model), k = 2, steps = max_features)
-
-# Save the forward_result object as an RDS file
-saveRDS(forward_result, filename)
-
 # Set the filename for the RDS file
 filename <- paste0(data_dir, "forward_result.rds")
 
@@ -285,7 +279,7 @@ if (file.exists(filename)) {
   saveRDS(forward_result, filename)
 }
 
-# Print a summary of the forward_result object
+# Print a summaryr of the foward_result object
 summary(forward_result)
 
 selected_names <- names(coef(forward_result))[-1]  # exclude the intercept
@@ -317,7 +311,7 @@ train_labels <- train_data$price
 # Perform a linear regression to predict price
 model <- lm(price ~., data = train_data)
 summary(model)
-----------------------------------------------------
+
 #PCA
 # Identify the numeric variables
 numeric_vars <- sapply(train_set_no_price, is.numeric)
@@ -334,7 +328,6 @@ pca_all_numeric$rotation
 
 # Principal component scores for each observation
 pca_all_numeric$x
-----------------------------------------------------
 #Factor Analysis
 
 # Standardize the numeric variables
@@ -350,7 +343,6 @@ print(fa_result$loadings)
 
 # Factor scores for each observation
 fa_scores <- fa_result$scores
-----------------------------------------------------
 #Lasso
 # Prepare the data
 x <- as.matrix(train_set_no_price)
@@ -397,7 +389,7 @@ plot(test_labels, lasso_preds, main = "LASSO Regression", xlab = "Actual", ylab 
 abline(0, 1, col = "red") # Add a 45-degree reference line
 
 # PCA biplot
-biplot(pca, main = "PCA Biplot")
+biplot(pca_all_numeric, main = "PCA Biplot")
 
 # Factor analysis loadings plot
 library(ggplot2)
@@ -415,7 +407,7 @@ ggplot(loadings_long, aes(x = factor, y = variable, fill = loading, size = abs(l
 par(mfrow = c(1, 2)) # Arrange plots in a 1x2 grid
 
 # PCA scree plot
-pca_pve <- (pca$sdev^2) / sum(pca$sdev^2)
+pca_pve <- (pca_all_numeric$sdev^2) / sum(pca_all_numeric$sdev^2)
 plot(pca_pve, type = "b", main = "PCA Scree Plot", xlab = "Principal Component", ylab = "Proportion of Variance Explained")
 abline(v = which.max(diff(pca_pve)), col = "red", lty = 2) # Add a vertical line at the elbow point
 
