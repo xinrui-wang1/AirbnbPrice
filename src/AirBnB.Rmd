@@ -93,17 +93,20 @@ summary(data$price)
 summary(data$review_scores_rating)
 
 # Plot the distribution of the price variable
-ggplot(data, aes(price)) + 
-  geom_histogram() + 
-  xlim(0, 3000)
-
-ggplot(data, aes(price)) + 
-  geom_histogram() + 
-  xlim(0, 500)
+bin_width = 50
+price_distribution_plot <- ggplot(data, aes(price)) + 
+  geom_histogram(aes(y = ..density.. * bin_width), binwidth = bin_width, fill = "lightblue", color = "steelblue") + 
+  geom_density(aes(y = ..density.. * bin_width), alpha = 0.5, color = "darkblue") +
+  xlim(0, 3000) +
+  labs(title = "Price Distribution", y = "Density")
+ggsave(filename = "../out/price_distribution_plot.png", plot = price_distribution_plot)
 
 # Plot the relationship between price and number of bedrooms
-ggplot(data, aes(x = bedrooms, y = price)) + 
-  geom_point()
+box_plot <- ggplot(data, aes(x = factor(bedrooms), y = price, fill = factor(bedrooms))) + 
+  geom_boxplot() +
+  labs(title = "Price vs. Bedrooms", x = "Bedrooms", y = "Price", fill = "Bedrooms")
+ggsave(filename = "../out/price_vs_bedrooms_boxplot.png", plot = box_plot)
+
 
 # Show the average price for the top 20 most popular property types and sort the plot
 top_property_types <- data %>% 
@@ -111,15 +114,20 @@ top_property_types <- data %>%
   summarize(num_properties = n()) %>% 
   top_n(20, num_properties)
 
-data %>% 
+avg_price_plot <- data %>% 
   filter(property_type %in% top_property_types$property_type) %>% 
   group_by(property_type) %>% 
   summarize(avg_price = mean(price)) %>% 
-  arrange(desc(avg_price)) %>% # Sort by average price in descending order
-  ggplot(aes(x = property_type, y = avg_price)) +
+  arrange(avg_price) %>% 
+  mutate(property_type_ordered = factor(property_type, levels = property_type)) %>% 
+  ggplot(aes(x = property_type_ordered, y = avg_price, fill = property_type_ordered)) +
   geom_bar(stat = "identity") +
+  scale_fill_viridis_d() +
   coord_flip() +
-  labs(x = "Property Type", y = "Average Price")
+  labs(x = "Property Type", y = "Average Price", title = "Average Price by Property Type") +
+  theme(legend.position = "none")
+
+ggsave(filename = "../out/average_price_by_property_type_no_legend.png", plot = avg_price_plot)
 
 # Get the top 20 neighborhoods by average price
 top_neighborhoods <- data %>% 
@@ -127,16 +135,22 @@ top_neighborhoods <- data %>%
   summarize(avg_price = mean(price)) %>% 
   top_n(20, avg_price)
 
-data %>% 
+avg_price_neighborhood_plot <- data %>% 
   filter(neighbourhood %in% top_neighborhoods$neighbourhood) %>% 
   group_by(neighbourhood) %>% 
   summarize(avg_price = mean(price)) %>% 
-  ggplot(aes(x = reorder(neighbourhood, -avg_price), y = avg_price)) +
+  arrange(avg_price) %>% 
+  mutate(neighbourhood_ordered = factor(neighbourhood, levels = neighbourhood)) %>% 
+  ggplot(aes(x = neighbourhood_ordered, y = avg_price, fill = neighbourhood_ordered)) +
   geom_col() +
+  scale_fill_viridis_d() +
   coord_flip() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8)) +
   theme(plot.margin = unit(c(1, 1, 1, 1), "cm")) +
-  labs(x = "Neighborhood", y = "Average Price")
+  labs(x = "Neighborhood", y = "Average Price", title = "Average Price by Neighborhood") +
+  theme(legend.position = "none")
+
+ggsave(filename = "../out/average_price_by_neighborhood_no_legend.png", plot = avg_price_neighborhood_plot)
 
 # Create a new variable for the month of the year
 #data$month <- month(ymd(data$last_review))
